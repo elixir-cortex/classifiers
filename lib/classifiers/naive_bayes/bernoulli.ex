@@ -1,4 +1,4 @@
-defmodule Classifiers.NaiveBayesian do
+defmodule Classifiers.NaiveBayes.Bernoulli do
   defstruct class_instances: %{},
             training_instances: 0,
             features: 0,
@@ -9,7 +9,7 @@ defmodule Classifiers.NaiveBayesian do
   """
   def new do
     {:ok, pid} = Agent.start_link fn ->
-      %Classifiers.NaiveBayesian{}
+      %Classifiers.NaiveBayes.Bernoulli{}
     end
 
     pid

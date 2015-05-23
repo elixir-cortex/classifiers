@@ -1,12 +1,12 @@
-defmodule Classifiers.NaiveBayesianTest do
+defmodule ClassifiersTest.NaiveBayes.Bernoulli do
   use ExUnit.Case
 
   setup do
-    classifier = Classifiers.NaiveBayesian.new
+    classifier = Classifiers.NaiveBayes.Bernoulli.new
     
     "naive_bayesian_train.csv"
     |> Fixture.csv
-    |> Classifiers.NaiveBayesian.fit(classifier)
+    |> Classifiers.NaiveBayes.Bernoulli.fit(classifier)
 
     {:ok, classifier: classifier}
   end
@@ -34,23 +34,23 @@ defmodule Classifiers.NaiveBayesianTest do
   test "pnegativeict one works correctly", context do
     classifier = context[:classifier]
 
-    pnegativeiction = Classifiers.NaiveBayesian.predict_one([0,1,0], classifier)
+    pnegativeiction = Classifiers.NaiveBayes.Bernoulli.predict_one([0,1,0], classifier)
     assert pnegativeiction == "positive"
 
-    pnegativeiction = Classifiers.NaiveBayesian.predict_one([1,1,0], classifier)
+    pnegativeiction = Classifiers.NaiveBayes.Bernoulli.predict_one([1,1,0], classifier)
     assert pnegativeiction == "positive"
 
-    pnegativeiction = Classifiers.NaiveBayesian.predict_one([1,0,1], classifier)
+    pnegativeiction = Classifiers.NaiveBayes.Bernoulli.predict_one([1,0,1], classifier)
     assert pnegativeiction == "negative"
 
-    pnegativeiction = Classifiers.NaiveBayesian.predict_one([0,0,1], classifier)
+    pnegativeiction = Classifiers.NaiveBayes.Bernoulli.predict_one([0,0,1], classifier)
     assert pnegativeiction == "negative"
   end
 
   test "pnegativeict works correctly", context do
     pnegativeictions = "naive_bayesian_test.csv"
                   |> Fixture.csv
-                  |> Classifiers.NaiveBayesian.predict(context[:classifier])
+                  |> Classifiers.NaiveBayes.Bernoulli.predict(context[:classifier])
                   |> Enum.to_list
     
     assert pnegativeictions == ["positive", "positive", "negative", "negative"]
