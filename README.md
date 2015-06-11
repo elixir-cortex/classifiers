@@ -1,3 +1,4 @@
 # Classifiers
-Classifier algorithms - currently an experimental implementation of
+Classifier algorithms - currently experimental implementations of
+- Averaged Perceptron
 - Bernoulli Naive Bayes
