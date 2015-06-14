@@ -6,9 +6,13 @@ defmodule ClassifiersTest.Perceptron.Average do
     
     "average_perceptron_train.csv"
     |> Fixture.csv(num_pipes: 1)
-    |> Classifiers.Perceptron.Average.fit(classifier)
+    |> Classifiers.Perceptron.Average.fit(classifier, epochs: 1)
 
-    {:ok, classifier: classifier}
+    testfile = "average_perceptron_test.csv"
+               |> Fixture.csv(num_pipes: 1)
+
+
+    {:ok, classifier: classifier, testfile: testfile}
   end
 
   defp get_classifier(pid) do
@@ -27,9 +31,17 @@ defmodule ClassifiersTest.Perceptron.Average do
     assert e |> Map.values |> Enum.sum == 8
   end
 
+  test "predict_one works correctly", context do
+    prediction = context[:testfile]
+                 |> Enum.take(1)
+                 |> List.first
+                 |> Classifiers.Perceptron.Average.predict_one(context[:classifier])
+
+    assert prediction == "democrat"
+  end
+
   test "predict works correctly", context do
-    predictions = "average_perceptron_test.csv"
-                  |> Fixture.csv(num_pipes: 1)
+    predictions = context[:testfile]
                   |> Classifiers.Perceptron.Average.predict(context[:classifier])
                   |> Enum.to_list
     assert predictions == 

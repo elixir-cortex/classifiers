@@ -4,6 +4,8 @@ defmodule Classifiers.Perceptron.Average do
             count: 0,
             epoch: 0
 
+  @stream_chunks 10
+
   @doc """
     Get a new classifier pid.
   """
@@ -20,64 +22,10 @@ defmodule Classifiers.Perceptron.Average do
     Currently expects input in the form of a stream of maps as the following:
      [ feature_1, feature_2, ... feature_n, class ]
   """
-  def fit(stream, pid) do
-    stream |> Stream.chunk(10) |> Enum.each fn chunk ->
-      Agent.get_and_update pid, fn classifier ->
-        c = chunk |> Enum.reduce classifier, fn row, classifier ->
-          label = row |> List.last
-          features = row |> Enum.drop(-1)
-                         |> Enum.with_index
-                         |> Enum.map(fn {a, b} -> {a,b} end)
-
-          classifier = case classifier |> make_prediction(features, true) do
-            nil ->
-              %{ 
-                classifier | edges: classifier.edges |> Map.put(
-                  label, features |> Enum.into(%{}, &({&1, 1}))
-                )
-              }
-            ^label ->
-              classifier
-            prediction ->
-              %{
-                classifier | edges: classifier.edges |> Map.update(
-                  label, %{}, fn current ->
-                    features |> Enum.reduce(
-                      current, fn feature, current ->
-                        current |> Map.update(feature, 0, &(&1 + 1))
-                      end
-                    )
-                  end 
-                ) |> Map.update(
-                  prediction, %{}, fn current ->
-                    features |> Enum.reduce(
-                      current, fn feature, current ->
-                        current |> Map.update(feature, 0, &(&1 - 1))
-                      end
-                    )
-                  end 
-                )
-              }
-          end
-
-          %{ classifier |
-             count: classifier.count + 1,
-             weights: classifier.edges |> Enum.reduce(
-                classifier.weights, fn { label, edges }, weights ->
-                  target = weights |> Map.get(label, %{})
-                  target = edges |> Enum.reduce(target, fn { feature, edge }, target ->
-                    target |> Map.update(feature, 0, fn weight -> 
-                      (classifier.count * weight + edge) / (classifier.count + 1)
-                    end)
-                  end)
-
-                  weights |> Map.update(label, %{}, fn w -> w |> Map.merge(target) end)
-                end
-              )
-          }
-        end
-
-        {:ok, c}
+  def fit(stream, pid, options \\ [epochs: 5]) do
+    1..options[:epochs] |> Enum.each fn epoch ->
+      stream |> Stream.chunk(@stream_chunks) |> Enum.each fn chunk ->
+        Agent.get_and_update pid, &update(&1, chunk, epoch)
       end
     end
   end
@@ -85,7 +33,9 @@ defmodule Classifiers.Perceptron.Average do
   @doc """
     Predict the class for one set of features.
   """
-  def predict_one(features, pid) do
+  def predict_one(row, pid) do
+    features = row |> Enum.with_index |> Enum.map(fn {a, b} -> {a, b} end)
+    classifier(pid) |> make_prediction(features, false)
   end
 
   @doc """
@@ -100,21 +50,100 @@ defmodule Classifiers.Perceptron.Average do
     end)
   end
 
-  defp make_prediction(%{edges: edges}, features, true) when map_size(edges) == 0 do
+  defp update(classifier, chunk, epoch) do
+    c = chunk |> Enum.reduce classifier, fn row, classifier ->
+      { label, features } = row |> split_label_and_features
+
+      classifier = case classifier |> make_prediction(features, true) do
+        nil ->
+          %{
+            classifier |
+            edges: classifier |> calculate_edges(label, features)
+          }
+        ^label ->
+          classifier
+        prediction ->
+          %{
+            classifier |
+            edges: classifier |> calculate_edges(label, features, prediction)
+          }
+      end
+
+      %{ 
+        classifier |
+        count: classifier.count + 1,
+        epoch: epoch,
+        weights: classifier |> calculate_weights
+      }
+    end
+
+    {:ok, c}
+  end
+
+  defp split_label_and_features(row) do
+    label = row |> List.last
+    features = row |> Enum.drop(-1)
+                   |> Enum.with_index
+                   |> Enum.map(fn {a, b} -> {a,b} end)
+
+    { label, features }
+  end
+
+  defp make_prediction(%{edges: edges}, _, true) when map_size(edges) == 0 do
   end
   defp make_prediction(%{edges: edges}, features, true) do
-    {p, _} = edges |> Enum.max_by fn { label, edge } ->
+    {p, _} = edges |> Enum.max_by fn { _, edge } ->
       features |> Enum.reduce(0, fn feature, weight -> weight + Map.get(edge, feature, 0) end)
     end
 
     p
   end
   defp make_prediction(%{weights: weights}, features, false) do
-    {p, _} = weights |> Enum.max_by fn { label, weight } ->
+    {p, _} = weights |> Enum.max_by fn { _, weight } ->
       features |> Enum.reduce(0, fn feature, w -> w + Map.get(weight, feature, 0) end)
     end
 
     p
+  end
+
+  defp calculate_edges(%{edges: edges}, label, features) do
+    edges |> Map.put(
+      label, features |> Enum.into(%{}, &({&1, 1}))
+    )
+  end
+  defp calculate_edges(%{edges: edges}, label, features, prediction) do
+    edges |> Map.update(
+      label, %{}, fn current ->
+        features |> Enum.reduce(
+          current, fn feature, current ->
+            current |> Map.update(feature, 0, &(&1 + 1))
+          end
+        )
+      end 
+    ) |> Map.update(
+      prediction, %{}, fn current ->
+        features |> Enum.reduce(
+          current, fn feature, current ->
+            current |> Map.update(feature, 0, &(&1 - 1))
+          end
+        )
+      end 
+    )
+  end
+
+  defp calculate_weights(%{edges: edges, weights: feature_weights, count: count}) do
+    edges |> Enum.reduce(
+      feature_weights, fn { label, edges }, weights ->
+        target = weights |> Map.get(label, %{})
+        target = edges |> Enum.reduce(target, fn { feature, edge }, target ->
+          target |> Map.update(feature, 0, fn weight -> 
+            (count * weight + edge) / (count + 1)
+          end)
+        end)
+
+        weights |> Map.update(label, %{}, fn w -> w |> Map.merge(target) end)
+      end
+    )
   end
 
   defp classifier(pid) do
